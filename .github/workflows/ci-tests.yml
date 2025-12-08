@@ -37,6 +37,9 @@ jobs:
       - name: Save Docker image to tar
         run: docker save myapp:latest -o myapp.tar
 
+      - name: Fix permissions
+        run: sudo chmod 644 myapp.tar
+
       - name: Copy image to server
         uses: appleboy/scp-action@v0.1.7
         with:
