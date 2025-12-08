@@ -1,9 +1,7 @@
-name: Run tests
+name: Tests → Build Docker → Deploy
 
 on:
   push:
-    branches: ["main"]
-  pull_request:
     branches: ["main"]
 
 jobs:
@@ -11,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -24,3 +22,49 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+  deploy:
+    needs: tests              # ← запускается ТОЛЬКО если тесты прошли
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t myapp:latest .
+
+      - name: Save Docker image to tar
+        run: docker save myapp:latest -o myapp.tar
+
+      - name: Copy image to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          source: "myapp.tar"
+          target: "~/deploy"
+
+      - name: Deploy on server via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          script: |
+            mkdir -p ~/deploy
+            cd ~/deploy
+
+            echo "Loading Docker image..."
+            docker load -i myapp.tar
+
+            echo "Stopping old container..."
+            docker rm -f myapp || true
+
+            echo "Starting new container..."
+            docker run -d --name myapp -p 80:80 myapp:latest
+
+            echo "Deployment finished."
